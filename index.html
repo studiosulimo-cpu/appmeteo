@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+<title>MeteoVicino — per località</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{
+    --bg:#0f1419; --panel:#161d26; --panel-2:#1e2732; --line:#2b3644;
+    --ink:#e8edf2; --ink-dim:#9aa7b4; --accent:#4ba3ff; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+    background:var(--bg); color:var(--ink); display:flex; flex-direction:column; height:100dvh}
+  header{padding:.7rem 1rem; border-bottom:1px solid var(--line); background:var(--panel)}
+  .titlebar{display:flex; align-items:baseline; gap:.6rem; margin-bottom:.55rem}
+  header h1{font-size:1.05rem; margin:0; font-weight:600}
+  header .sub{font-size:.78rem; color:var(--ink-dim)}
+  .searchbar{display:flex; gap:.5rem}
+  #q{flex:1; min-width:0; background:var(--panel-2); border:1px solid var(--line);
+    color:var(--ink); border-radius:8px; padding:.5rem .7rem; font-size:.9rem}
+  #q::placeholder{color:var(--ink-dim)}
+  .btn{background:var(--accent); color:#04121f; border:0; font-weight:600; font-size:.82rem;
+    padding:.5rem .8rem; border-radius:8px; cursor:pointer; white-space:nowrap}
+  .btn.ghost{background:var(--panel-2); color:var(--ink); border:1px solid var(--line)}
+  .btn:active{transform:translateY(1px)}
+  main{flex:1; display:flex; min-height:0}
+  #map{flex:1; min-height:0; background:#0b0f13}
+  #panel{width:360px; max-width:42vw; overflow-y:auto; padding:.8rem;
+    background:var(--panel); border-left:1px solid var(--line)}
+  #status{font-size:.8rem; color:var(--ink-dim); margin:.2rem 0 .7rem}
+  .muted{color:var(--ink-dim); font-size:.8rem}
+  .err{color:#f0a83c; font-size:.8rem}
+  /* risultati ricerca */
+  .result{background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:.5rem .65rem; margin-bottom:.4rem; cursor:pointer}
+  .result:hover{border-color:var(--accent)}
+  .result b{font-weight:600}
+  .result span{display:block; font-size:.74rem; color:var(--ink-dim)}
+  /* card meteo attuale */
+  .card{background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius);
+    padding:.75rem .85rem; margin-bottom:.7rem}
+  .card h2{margin:0 0 .1rem; font-size:.98rem; font-weight:600}
+  .card .place{font-size:.76rem; color:var(--ink-dim); margin-bottom:.55rem}
+  .now{display:flex; align-items:center; gap:.6rem}
+  .now .ico{font-size:2.1rem; line-height:1}
+  .big{font-size:1.9rem; font-weight:700; line-height:1}
+  .big small{font-size:.9rem; color:var(--ink-dim); font-weight:500}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:.35rem .8rem; margin-top:.6rem; font-size:.82rem}
+  .grid span{color:var(--ink-dim)}
+  /* previsione giornaliera */
+  .days{display:flex; flex-direction:column; gap:.3rem}
+  .day{display:grid; grid-template-columns:2.6rem 1.6rem 1fr auto; align-items:center;
+    gap:.5rem; padding:.35rem .2rem; border-top:1px solid var(--line); font-size:.85rem}
+  .day:first-child{border-top:0}
+  .day .dow{color:var(--ink-dim); text-transform:capitalize}
+  .day .ic{font-size:1.15rem; text-align:center}
+  .day .tmax{font-weight:600}
+  .day .tmin{color:var(--ink-dim); margin-left:.35rem}
+  .day .pr{color:var(--accent); font-size:.76rem}
+  /* animazione */
+  #anim{margin:.2rem 0 .6rem}
+  #anim button{background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; padding:.42rem .75rem; font-size:.8rem; cursor:pointer}
+  #animLbl{margin-left:.55rem; font-variant-numeric:tabular-nums; color:var(--ink-dim); font-size:.8rem}
+  footer{padding:.45rem 1rem; font-size:.68rem; color:var(--ink-dim);
+    border-top:1px solid var(--line); background:var(--panel); line-height:1.5}
+  @media (max-width:760px){
+    main{flex-direction:column}
+    #map{height:44vh; flex:none}
+    #panel{width:100%; max-width:none; border-left:0; border-top:1px solid var(--line)}
+    header .sub{display:none}
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="titlebar"><h1>MeteoVicino</h1><span class="sub">meteo per località + radar</span></div>
+    <div class="searchbar">
+      <input id="q" type="text" placeholder="Cerca un comune (es. Taverna, Aosta, Pont-Saint-Martin)" autocomplete="off" />
+      <button id="searchBtn" class="btn">Cerca</button>
+      <button id="locBtn" class="btn ghost">Posizione</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="map"></div>
+    <aside id="panel">
+      <div id="anim"><button id="animBtn">▶ Anima ultima ora</button><span id="animLbl"></span></div>
+      <p id="status">Cerca un comune o usa la tua posizione per vedere meteo e previsione.</p>
+      <div id="results"></div>
+      <div id="forecast"></div>
+    </aside>
+  </main>
+
+  <footer>
+    Radar © Dipartimento della Protezione Civile — Radar-DPC (CC BY-SA) ·
+    Meteo e previsioni © Open-Meteo · Mappa base © OpenStreetMap
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    /* Se unpkg è bloccato, carico Leaflet da jsDelivr PRIMA dello script dell'app */
+    if (typeof L === 'undefined') {
+      document.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">');
+      document.write('<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+    }
+  </script>
+  <script>
+  if (typeof L === 'undefined') {
+    document.getElementById('status').textContent =
+      'Leaflet non si è caricato: controlla la connessione o eventuali blocchi di rete, poi ricarica.';
+    throw new Error('Leaflet non caricato');
+  }
+
+  const ITALY = [42.5, 12.5];
+  const ITALY_BOUNDS = L.latLngBounds([[35.0, 4.4], [48.0, 20.6]]);
+  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+  const map = L.map('map', { zoomControl:true }).setView(ITALY, 6);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { maxZoom:19, attribution:'© OpenStreetMap' }).addTo(map);
+
+  // ---- Radar DPC: un layer WMTS REST per prodotto, uno alla volta ----
+  function dpcLayer(product, style){
+    return L.tileLayer(
+      `https://radar-geowebcache.protezionecivile.it/gwc/service/wmts/rest/radar:${product}/${style}/EPSG:900913/EPSG:900913:{z}/{y}/{x}?format=image/png`,
+      { opacity:0.65, maxNativeZoom:11, maxZoom:19, tileSize:256,
+        bounds:ITALY_BOUNDS, errorTileUrl:BLANK,
+        attribution:'Radar © Protezione Civile (CC BY-SA)' }
+    );
+  }
+  const SRI = "Pioggia al suolo (SRI)";
+  const dpc = {
+    [SRI]:                       dpcLayer('sri','sri'),
+    "Intensità in quota (VMI)":  dpcLayer('vmi','vmi'),
+    "Cumulata 1 h (SRT)":        dpcLayer('srt1','srt'),
+    "Cumulata 3 h (SRT)":        dpcLayer('srt3','srt'),
+    "Cumulata 6 h (SRT)":        dpcLayer('srt6','srt')
+  };
+  const dpcLayers = Object.values(dpc);
+  dpcLayers.forEach(l => l.on('tileerror', () => {}));
+  dpc[SRI].addTo(map);
+  L.control.layers(null, dpc, { collapsed:false }).addTo(map);
+  map.on('overlayadd', e => {
+    if (dpcLayers.includes(e.layer))
+      dpcLayers.forEach(l => { if (l !== e.layer && map.hasLayer(l)) map.removeLayer(l); });
+  });
+
+  // ---- Animazione ultima ora (SRI via WMS + time) ----
+  const animLayer = L.tileLayer.wms('https://radar-geowebcache.protezionecivile.it/service/wms', {
+    layers:'radar:sri', format:'image/png', transparent:true, version:'1.1.1',
+    opacity:0.65, bounds:ITALY_BOUNDS, errorTileUrl:BLANK
+  });
+  function frameTimes(n){
+    const step=5*60*1000, lag=10*60*1000;
+    const base=Math.floor((Date.now()-lag)/step)*step;
+    return Array.from({length:n}, (_,i) => new Date(base-(n-1-i)*step).toISOString());
+  }
+  let animTimer=null, frames=[], fi=0;
+  const animBtn=document.getElementById('animBtn'), animLbl=document.getElementById('animLbl');
+  function stopAnim(){
+    clearInterval(animTimer); animTimer=null;
+    if(map.hasLayer(animLayer)) map.removeLayer(animLayer);
+    if(!map.hasLayer(dpc[SRI])) dpc[SRI].addTo(map);
+    animBtn.textContent='▶ Anima ultima ora'; animLbl.textContent='';
+  }
+  function playAnim(){
+    frames=frameTimes(12); fi=0;
+    dpcLayers.forEach(l => { if(map.hasLayer(l)) map.removeLayer(l); });
+    animLayer.addTo(map);
+    animBtn.textContent='⏸ Ferma';
+    animTimer=setInterval(()=>{
+      const t=frames[fi];
+      animLayer.setParams({time:t});
+      animLbl.textContent=new Date(t).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+      fi=(fi+1)%frames.length;
+    }, 700);
+  }
+  animBtn.addEventListener('click', ()=> animTimer ? stopAnim() : playAnim());
+
+  // =====================================================================
+  //  Meteo per località (Open-Meteo: geocoding + forecast, senza token)
+  // =====================================================================
+  const WMO = {0:["Sereno","☀️"],1:["Poco nuvoloso","🌤️"],2:["Nubi sparse","⛅"],3:["Coperto","☁️"],
+    45:["Nebbia","🌫️"],48:["Nebbia","🌫️"],51:["Pioviggine","🌦️"],53:["Pioviggine","🌦️"],55:["Pioviggine","🌦️"],
+    61:["Pioggia debole","🌧️"],63:["Pioggia","🌧️"],65:["Pioggia forte","🌧️"],
+    66:["Pioggia gelata","🌧️"],67:["Pioggia gelata","🌧️"],
+    71:["Neve debole","🌨️"],73:["Neve","🌨️"],75:["Neve forte","❄️"],77:["Nevischio","🌨️"],
+    80:["Rovesci","🌦️"],81:["Rovesci","🌦️"],82:["Rovesci forti","⛈️"],
+    85:["Rovesci di neve","🌨️"],86:["Rovesci di neve","🌨️"],
+    95:["Temporale","⛈️"],96:["Temporale","⛈️"],99:["Temporale","⛈️"]};
+  const wmo = c => WMO[c] || ["—","•"];
+  const num = (v,dec=1)=> (v===null||v===undefined||v==='') ? '–' : Number(v).toFixed(dec);
+  const status = m => document.getElementById('status').textContent = m;
+  let marker = null;
+
+  // Provider 1: Open-Meteo geocoding
+  async function geocodeOM(name){
+    const u=`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=6&language=it&format=json`;
+    const d=await (await fetch(u)).json();
+    return (d.results||[]).map(r=>({
+      name:r.name, admin1:r.admin1, admin2:r.admin2, country:r.country,
+      cc:r.country_code, lat:r.latitude, lon:r.longitude
+    }));
+  }
+  // Provider 2 (riserva, host diverso): OpenStreetMap / Nominatim
+  async function geocodeOSM(name){
+    const u=`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&accept-language=it&q=${encodeURIComponent(name)}`;
+    const arr=await (await fetch(u)).json();
+    return (arr||[]).map(x=>{
+      const a=x.address||{};
+      const nm=a.city||a.town||a.village||a.municipality||a.hamlet||(x.display_name||'').split(',')[0];
+      return {name:nm, admin1:a.state, admin2:a.county, country:a.country,
+        cc:(a.country_code||'').toUpperCase(), lat:+x.lat, lon:+x.lon};
+    });
+  }
+
+  async function geocode(name){
+    const box=document.getElementById('results');
+    document.getElementById('forecast').innerHTML='';
+    box.innerHTML=''; status('Cerco “'+name+'”…');
+
+    let res=[], firstErr=null;
+    try{ res=await geocodeOM(name); }
+    catch(e){ firstErr=e; }                    // Open-Meteo bloccato o irraggiungibile
+    if(!res.length){                           // vuoto o fallito: provo OSM
+      try{ res=await geocodeOSM(name); }
+      catch(e2){
+        console.error('Geocoding OM:', firstErr, ' | OSM:', e2);
+        status('Errore di rete nella ricerca: '+((firstErr&&firstErr.message)||e2.message)
+          +'. Probabile blocco di rete (aziendale/adblock) o apertura via file://. Prova via http/localhost.');
+        return;
+      }
+    }
+    if(!res.length){ status('Nessuna località trovata per “'+name+'”.'); return; }
+
+    status('Scegli la località:');
+    res.sort((a,b)=> (a.cc==='IT'?-1:0) - (b.cc==='IT'?-1:0));   // italiane per prime
+    box.innerHTML = res.map((r,i)=>{
+      const sub=[r.admin2,r.admin1,r.country].filter(Boolean).join(', ');
+      return `<div class="result" data-i="${i}"><b>${r.name}</b><span>${sub}</span></div>`;
+    }).join('');
+    box.querySelectorAll('.result').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const r=res[+el.dataset.i];
+        box.innerHTML='';
+        selectPlace(r.lat, r.lon, `${r.name}${r.admin1?' ('+r.admin1+')':''}`);
+      });
+    });
+  }
+
+  function selectPlace(lat,lon,label){
+    map.setView([lat,lon], 11);
+    if(marker) map.removeLayer(marker);
+    marker=L.marker([lat,lon]).addTo(map).bindPopup('<b>'+label+'</b>').openPopup();
+    loadForecast(lat,lon,label);
+  }
+
+  async function loadForecast(lat,lon,label){
+    const fc=document.getElementById('forecast');
+    status(''); fc.innerHTML='<p class="muted">Carico la previsione…</p>';
+    try{
+      const u=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
+        +`&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m`
+        +`&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max`
+        +`&timezone=auto&forecast_days=7`;
+      const d=await (await fetch(u)).json();
+      const c=d.current, dl=d.daily;
+      const [ctxt,cico]=wmo(c.weather_code);
+      let html=`<div class="card">
+        <h2>${label}</h2>
+        <div class="place">Meteo attuale · Open-Meteo (modello)</div>
+        <div class="now">
+          <div class="ico">${cico}</div>
+          <div><div class="big">${num(c.temperature_2m)}<small> °C</small></div>
+            <div class="muted">${ctxt}</div></div>
+        </div>
+        <div class="grid">
+          <div><span>Umidità</span> ${num(c.relative_humidity_2m,0)} %</div>
+          <div><span>Vento</span> ${num(c.wind_speed_10m,0)} km/h</div>
+          <div><span>Pioggia</span> ${num(c.precipitation)} mm</div>
+        </div>
+      </div>`;
+
+      html+=`<div class="card"><h2>Prossimi 7 giorni</h2><div class="days">`;
+      for(let i=0;i<dl.time.length;i++){
+        const dow=new Date(dl.time[i]).toLocaleDateString('it-IT',{weekday:'short'});
+        const [,ic]=wmo(dl.weather_code[i]);
+        const pr=dl.precipitation_sum[i];
+        html+=`<div class="day">
+          <span class="dow">${dow}</span>
+          <span class="ic">${ic}</span>
+          <span><span class="tmax">${num(dl.temperature_2m_max[i],0)}°</span><span class="tmin">${num(dl.temperature_2m_min[i],0)}°</span></span>
+          <span class="pr">${pr>0?num(pr,1)+' mm':''}</span>
+        </div>`;
+      }
+      html+=`</div></div>`;
+      fc.innerHTML=html;
+    }catch(e){ fc.innerHTML='<p class="err">Previsione non disponibile ora. Riprova.</p>'; }
+  }
+
+  // ---- Eventi ----
+  function runSearch(){ const v=document.getElementById('q').value.trim(); if(v) geocode(v); }
+  document.getElementById('searchBtn').addEventListener('click', runSearch);
+  document.getElementById('q').addEventListener('keydown', e=>{ if(e.key==='Enter') runSearch(); });
+
+  document.getElementById('locBtn').addEventListener('click', ()=>{
+    if(!navigator.geolocation){ status('Geolocalizzazione non supportata.'); return; }
+    status('Individuo la tua posizione…');
+    navigator.geolocation.getCurrentPosition(
+      p => selectPlace(p.coords.latitude, p.coords.longitude, 'La tua posizione'),
+      () => status('Permesso negato o non disponibile. Cerca il comune a mano.'),
+      { enableHighAccuracy:false, timeout:8000, maximumAge:300000 }
+    );
+  });
+  </script>
+</body>
+</html>
