@@ -123,6 +123,23 @@
   .pollen .prow{display:flex; justify-content:space-between; font-size:.85rem; padding:3px 0}
   .pollen .prow .lv{font-weight:600}
 
+  .stations-bar{display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:8px; scrollbar-width:thin}
+  .chip{flex:0 0 auto; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:8px 13px;
+    font-family:var(--display); font-weight:500; font-size:.85rem; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:var(--shadow-sm); color:var(--ink)}
+  .chip:active{transform:translateY(1px)}
+  .chip .pin{width:15px; height:15px; color:var(--accent)}
+  .sensor{padding:14px 16px; margin-bottom:16px}
+  .sensor-h{font-family:var(--display); font-weight:600; font-size:.9rem; margin-bottom:10px}
+  .sensor-g{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}
+  .sensor-g div{background:var(--bg); border-radius:11px; padding:8px; text-align:center}
+  .sensor-g b{display:block; font-family:var(--display); font-weight:600}
+  .sensor-g span{font-size:.68rem; color:var(--dim)}
+  .news{display:flex; flex-direction:column; gap:12px; margin-bottom:18px}
+  .post{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px}
+  .post h3{font-family:var(--display); font-size:1.02rem; margin:0 0 4px}
+  .post .meta{font-size:.74rem; color:var(--dim); margin-bottom:8px}
+  .post .body{font-size:.9rem; margin:0}
+  .post-link{display:inline-block; margin-top:10px; color:var(--accent); font-weight:600; font-size:.85rem; text-decoration:none}
   .radar-head{display:flex; align-items:center; gap:10px; margin:0 2px 8px}
   .radar-head .section-title{margin:0; flex:1}
   #animBtn{display:flex; align-items:center; gap:6px; border:1px solid var(--line); background:var(--surface);
@@ -175,14 +192,17 @@
 
     <div class="layout">
       <div class="col-info">
+        <div id="stationsBar" class="stations-bar hidden"></div>
         <p id="status" class="status">Cerca un comune per vedere meteo e radar, o usa la tua posizione.</p>
         <div id="results" class="results"></div>
         <section id="hero" class="hero hidden"></section>
+        <section id="sensor" class="card sensor hidden"></section>
         <div id="hourlyWrap" class="hidden"><h2 class="section-title">Prossime ore</h2><div id="hourly" class="hourly"></div></div>
         <div id="dailyWrap" class="hidden"><h2 class="section-title">Prossimi 7 giorni</h2><div id="daily" class="card daily"></div></div>
         <div id="sunWrap" class="hidden"><h2 class="section-title">Sole e luna</h2><div id="sun" class="card sun"></div></div>
         <div id="detailsWrap" class="hidden"><h2 class="section-title">Dettagli</h2><div id="details" class="card details"></div></div>
         <div id="airWrap" class="hidden"><h2 class="section-title">Aria e pollini</h2><div id="air" class="card air"></div></div>
+        <div id="newsWrap" class="hidden"><h2 class="section-title">Notizie dell'associazione</h2><div id="news" class="news"></div></div>
       </div>
       <div class="col-map">
         <div class="radar-head"><h2 class="section-title">Radar</h2><button id="animBtn"></button><span id="animLbl"></span></div>
@@ -299,10 +319,11 @@
       el.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();pick(el);}});});
   }
 
-  function selectPlace(lat,lon,label){
+  function selectPlace(lat,lon,label,code){
     map.setView([lat,lon],10); map.invalidateSize();
     if(window._mk)map.removeLayer(window._mk); window._mk=L.marker([lat,lon]).addTo(map);
     loadForecast(lat,lon,label); loadAir(lat,lon);
+    if(code && CONFIG.WORKER_URL){ loadSensor(code,label); } else { document.getElementById('sensor').classList.add('hidden'); }
   }
 
   /* ---------- Meteo ---------- */
@@ -416,6 +437,75 @@
       document.getElementById('airWrap').classList.remove('hidden');
     }catch(e){ console.error('aria',e); document.getElementById('airWrap').classList.add('hidden'); }
   }
+
+  /* ---------- Associazione: stazioni + notizie ---------- */
+  const CONFIG={ WORKER_URL:'', NEWS_SHEET_CSV:'' };  // WORKER_URL: proxy sensori. NEWS_SHEET_CSV: link CSV del Foglio Google pubblicato
+  // Stazioni dell'associazione (SEGNAPOSTO: sostituisci con le vostre — codice MeteoNetwork + coordinate)
+  const STATIONS=[
+    {code:'clb094', name:'Taverna', lat:39.0206, lon:16.5808},
+    {code:'',       name:'Pont-Saint-Martin', lat:45.5990, lon:7.7960}
+  ];
+  // Notizie (SEGNAPOSTO: sostituisci, oppure crea news.json nel repo con lo stesso formato)
+  const NEWS=[
+    {date:'2026-08-14', title:'Benvenuti nell’app dell’associazione', author:'Redazione',
+     body:'Qui pubblicheremo avvisi, approfondimenti e allerte meteo per i soci e gli amici.\nBuona navigazione!', link:''}
+  ];
+  async function loadJSON(path,fb){try{const r=await fetch(path,{cache:'no-store'});if(r.ok){const j=await r.json();if(Array.isArray(j))return j;}}catch(e){}return fb;}
+
+  async function renderStationsBar(){
+    const list=await loadJSON('stations.json',STATIONS); if(!list.length)return;
+    const bar=document.getElementById('stationsBar');
+    bar.innerHTML='<span style="align-self:center;color:var(--dim);font-size:.8rem;margin-right:2px">Le nostre stazioni</span>'+
+      list.map((s,i)=>`<button class="chip" data-i="${i}">${PIN}${s.name}</button>`).join('');
+    bar.querySelectorAll('.chip').forEach(el=>el.addEventListener('click',()=>{const s=list[+el.dataset.i];
+      selectPlace(s.lat,s.lon,s.name,s.code); window.scrollTo({top:0,behavior:'smooth'});}));
+    bar.classList.remove('hidden');
+  }
+  async function loadSensor(code,label){
+    const el=document.getElementById('sensor');
+    try{
+      const j=await (await fetch(`${CONFIG.WORKER_URL}/realtime?code=${encodeURIComponent(code)}`)).json();
+      const d=Array.isArray(j)?j[0]:j; if(!d||d.temperature==null){el.classList.add('hidden');return;}
+      el.innerHTML=`<div class="sensor-h">Dati dal sensore · ${label}</div>
+        <div class="sensor-g">
+          <div><b>${r0(d.temperature)}°</b><span>Temp.</span></div>
+          <div><b>${r0(d.rh)}%</b><span>Umidità</span></div>
+          <div><b>${r0(d.wind_speed)} km/h</b><span>Vento</span></div>
+          <div><b>${(d.daily_rain??0)} mm</b><span>Pioggia oggi</span></div>
+        </div>`;
+      el.classList.remove('hidden');
+    }catch(e){ el.classList.add('hidden'); }
+  }
+  const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  function parseCSV(text){const rows=[];let row=[],cur='',q=false;
+    for(let i=0;i<text.length;i++){const ch=text[i];
+      if(q){ if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+      else { if(ch==='"')q=true; else if(ch===','){row.push(cur);cur='';}
+        else if(ch==='\n'){row.push(cur);rows.push(row);row=[];cur='';}
+        else if(ch!=='\r')cur+=ch; } }
+    if(cur!==''||row.length){row.push(cur);rows.push(row);} return rows;}
+  async function newsFromSheet(url){
+    const rows=parseCSV(await (await fetch(url)).text()).filter(r=>r.some(c=>(c||'').trim()!==''));
+    if(rows.length<2)return[];
+    const head=rows[0].map(h=>h.trim().toLowerCase()); const at=n=>head.indexOf(n);
+    const di=at('date'),ti=at('title'),ai=at('author'),bi=at('body'),li=at('link');
+    return rows.slice(1).map(r=>({date:di<0?'':r[di],title:ti<0?'':r[ti],author:ai<0?'':r[ai],body:bi<0?'':r[bi],link:li<0?'':r[li]}))
+      .filter(p=>p.title||p.body).reverse();  // aggiungi in fondo al foglio: i nuovi appaiono in cima
+  }
+  async function renderNews(){
+    let list=[];
+    if(CONFIG.NEWS_SHEET_CSV){ try{list=await newsFromSheet(CONFIG.NEWS_SHEET_CSV);}catch(e){console.error('sheet',e);} }
+    if(!list.length) list=await loadJSON('news.json',NEWS);
+    const box=document.getElementById('news'); if(!list.length)return;
+    box.innerHTML=list.map(p=>`<article class="post">
+      <h3>${esc(p.title)}</h3>
+      <div class="meta">${esc(p.date||'')}${p.author?' · '+esc(p.author):''}</div>
+      <p class="body">${esc(p.body).replace(/\n/g,'<br>')}</p>
+      ${p.link?`<a class="post-link" href="${esc(p.link)}" target="_blank" rel="noopener">Apri su Facebook</a>`:''}
+    </article>`).join('');
+    document.getElementById('newsWrap').classList.remove('hidden');
+  }
+  renderStationsBar(); renderNews();
 
   /* ---------- Eventi ---------- */
   function runSearch(){const v=document.getElementById('q').value.trim(); if(v)geocode(v);}
