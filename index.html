@@ -4,6 +4,12 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>MeteoVicino</title>
+<meta name="theme-color" content="#1478e0">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MeteoVicino">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='11' fill='%231466d6'/%3E%3Ccircle cx='15' cy='16' r='5' fill='%23ffd76b'/%3E%3Cpath d='M13 27h12a4 4 0 0 0 .4-8A5.5 5.5 0 0 0 14 17 4.5 4.5 0 0 0 13 27Z' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -123,6 +129,27 @@
   .pollen .prow{display:flex; justify-content:space-between; font-size:.85rem; padding:3px 0}
   .pollen .prow .lv{font-weight:600}
 
+  .alert{border-radius:14px; padding:11px 14px; margin-bottom:12px; font-size:.88rem; font-weight:600}
+  .alert.warn{background:#fff4e2; color:#9a5a12; border:1px solid #f3d6a6}
+  .alert.sev{background:#fde7df; color:#9b3416; border:1px solid #f3b9a3}
+  .chartbox{padding:12px 12px 4px; margin-bottom:18px}
+  .chart{display:block; width:100%; height:auto}
+  .caxis{fill:var(--dim); font-size:14px; font-family:var(--body)}
+  .hero{position:relative}
+  .fav-star{position:absolute; top:16px; right:16px; background:rgba(255,255,255,.6); border:1px solid rgba(255,255,255,.7);
+    border-radius:10px; width:38px; height:38px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--dim)}
+  .fav-star svg{width:20px; height:20px}
+  .fav-star.on{color:#f4a72a}
+  .hero.night.c-clear{background:linear-gradient(160deg,#2b3c54,#1b2838)}
+  .hero.night.c-cloud{background:linear-gradient(160deg,#2e3a49,#222c38)}
+  .hero.night.c-rain{background:linear-gradient(160deg,#28323f,#1c242e)}
+  .hero.night.c-snow{background:linear-gradient(160deg,#30404f,#202a36)}
+  .hero.night, .hero.night .hero-place{color:#eef3fa}
+  .hero.night .hero-cond, .hero.night .hero-sub{color:#aebccb}
+  .hero.night .hero-sub b{color:#eef3fa}
+  .hero.night .hero-metrics div{background:rgba(255,255,255,.12)}
+  .hero.night .hero-metrics span{color:#aebccb}
+  .hero.night .fav-star{background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.2); color:#cdd9e6}
   .stations-bar{display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:8px; scrollbar-width:thin}
   .chip{flex:0 0 auto; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:8px 13px;
     font-family:var(--display); font-weight:500; font-size:.85rem; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:var(--shadow-sm); color:var(--ink)}
@@ -193,12 +220,16 @@
     <div class="layout">
       <div class="col-info">
         <div id="stationsBar" class="stations-bar hidden"></div>
+        <div id="favBar" class="stations-bar hidden"></div>
+        <div id="alert" class="alert hidden"></div>
         <p id="status" class="status">Cerca un comune per vedere meteo e radar, o usa la tua posizione.</p>
         <div id="results" class="results"></div>
         <section id="hero" class="hero hidden"></section>
         <section id="sensor" class="card sensor hidden"></section>
         <div id="hourlyWrap" class="hidden"><h2 class="section-title">Prossime ore</h2><div id="hourly" class="hourly"></div></div>
+        <div id="chart24Wrap" class="hidden"><h2 class="section-title">Andamento 24 ore</h2><div id="chart24" class="card chartbox"></div></div>
         <div id="dailyWrap" class="hidden"><h2 class="section-title">Prossimi 7 giorni</h2><div id="daily" class="card daily"></div></div>
+        <div id="chart7Wrap" class="hidden"><h2 class="section-title">Andamento 7 giorni</h2><div id="chart7" class="card chartbox"></div></div>
         <div id="sunWrap" class="hidden"><h2 class="section-title">Sole e luna</h2><div id="sun" class="card sun"></div></div>
         <div id="detailsWrap" class="hidden"><h2 class="section-title">Dettagli</h2><div id="details" class="card details"></div></div>
         <div id="airWrap" class="hidden"><h2 class="section-title">Aria e pollini</h2><div id="air" class="card air"></div></div>
@@ -319,7 +350,9 @@
       el.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();pick(el);}});});
   }
 
+  let currentPlace=null;
   function selectPlace(lat,lon,label,code){
+    currentPlace={lat,lon,label,code:code||''}; saveLast(currentPlace);
     map.setView([lat,lon],10); map.invalidateSize();
     if(window._mk)map.removeLayer(window._mk); window._mk=L.marker([lat,lon]).addTo(map);
     loadForecast(lat,lon,label); loadAir(lat,lon);
@@ -337,13 +370,15 @@
         +`&timezone=auto&forecast_days=7`;
       const d=await (await fetch(u)).json(); status('');
       const h=d.hourly; let hi=h.time.findIndex(t=>t>=d.current.time); if(hi<0)hi=0;
+      renderAlert(d);
       renderHero(d,label); renderHourly(d,hi); renderDaily(d); renderSun(d); renderDetails(d,hi);
+      renderChart24(d,hi); renderChart7(d);
     }catch(e){ console.error(e); status('Previsione non disponibile ora. Riprova tra poco.',true); }
   }
 
   function renderHero(d,label){
     const c=d.current, dl=d.daily, w=wx(c.weather_code), el=document.getElementById('hero');
-    el.className='hero '+condClass(c.weather_code);
+    el.className='hero '+condClass(c.weather_code)+(c.is_day===0?' night':'');
     el.innerHTML=`
       <div class="hero-place">${label}</div>
       <div class="hero-cond">${w.label}</div>
@@ -353,8 +388,10 @@
         <div><b>${r0(c.relative_humidity_2m)}%</b><span>Umidità</span></div>
         <div><b>${r0(c.wind_speed_10m)} km/h</b><span>Vento</span></div>
         <div><b>${(c.precipitation??0)} mm</b><span>Pioggia</span></div>
-      </div>`;
+      </div>
+      <button class="fav-star" id="favStar" title="Aggiungi ai preferiti">${STAR}</button>`;
     el.classList.remove('hidden'); requestAnimationFrame(()=>el.classList.add('in'));
+    const st=document.getElementById('favStar'); if(st){updateStar(); st.addEventListener('click',toggleFav);}
   }
   function renderHourly(d,hi){
     const h=d.hourly, box=document.getElementById('hourly'); let html='';
@@ -507,6 +544,69 @@
   }
   renderStationsBar(); renderNews();
 
+  /* ---------- Preferiti, ultima località, allerta, grafici ---------- */
+  const LS=k=>{try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}};
+  const LSset=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
+  const saveLast=p=>LSset('mv_last',p);
+  const STAR='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.2l2.6 5.5 6 .8-4.4 4.1 1.1 5.9L12 16.9 6.7 19.5l1.1-5.9L3.4 9.5l6-.8z"/></svg>';
+  function favs(){return LS('mv_favs')||[];}
+  function isFav(p){return !!(p&&favs().some(f=>f.label===p.label));}
+  function updateStar(){const s=document.getElementById('favStar'); if(s)s.classList.toggle('on',isFav(currentPlace));}
+  function toggleFav(){if(!currentPlace)return; let a=favs();
+    if(isFav(currentPlace)) a=a.filter(f=>f.label!==currentPlace.label);
+    else a.push({lat:currentPlace.lat,lon:currentPlace.lon,label:currentPlace.label,code:currentPlace.code});
+    LSset('mv_favs',a); updateStar(); renderFavBar();}
+  function renderFavBar(){const a=favs(),bar=document.getElementById('favBar'); if(!a.length){bar.classList.add('hidden');return;}
+    bar.innerHTML='<span style="align-self:center;color:var(--dim);font-size:.8rem;margin-right:2px">Preferiti</span>'+
+      a.map((f,i)=>`<button class="chip" data-i="${i}">${PIN}${esc(f.label)}</button>`).join('');
+    bar.querySelectorAll('.chip').forEach(el=>el.addEventListener('click',()=>{const f=a[+el.dataset.i];selectPlace(f.lat,f.lon,f.label,f.code);window.scrollTo({top:0,behavior:'smooth'});}));
+    bar.classList.remove('hidden');}
+
+  function renderAlert(d){
+    const el=document.getElementById('alert'),c=d.current,dl=d.daily,code=c.weather_code,pp=dl.precipitation_probability_max?dl.precipitation_probability_max[0]:0;
+    const severe=[65,82,95,96,99,75,86].includes(code), warn=[63,80,81,71,73].includes(code)||pp>=70;
+    if(severe){el.className='alert sev';el.textContent='⚠ Allerta: previsti fenomeni intensi oggi ('+wx(code).label.toLowerCase()+').';el.classList.remove('hidden');}
+    else if(warn){el.className='alert warn';el.textContent='Attenzione: oggi '+(pp>=70?('pioggia probabile ('+pp+'%)'):('possibile '+wx(code).label.toLowerCase()))+'.';el.classList.remove('hidden');}
+    else el.classList.add('hidden');
+  }
+
+  function renderChart24(d,hi){
+    const h=d.hourly,N=Math.min(24,h.time.length-hi); if(N<2)return;
+    const T=[],P=[]; for(let i=0;i<N;i++){T.push(h.temperature_2m[hi+i]);P.push(h.precipitation_probability?h.precipitation_probability[hi+i]:0);}
+    const W=680,H=170,pL=30,pR=12,pT=14,pB=28,tmin=Math.min(...T),tmax=Math.max(...T),tr=Math.max(1,tmax-tmin);
+    const x=i=>pL+i*(W-pL-pR)/(N-1), y=v=>pT+(1-(v-tmin)/tr)*(H-pT-pB);
+    let bars=''; for(let i=0;i<N;i++){if(P[i]>0){const bh=(P[i]/100)*(H-pT-pB);bars+=`<rect x="${(x(i)-4).toFixed(1)}" y="${(H-pB-bh).toFixed(1)}" width="8" height="${bh.toFixed(1)}" rx="2" fill="#1478e0" opacity="0.13"/>`;}}
+    const pts=T.map((v,i)=>`${x(i).toFixed(1)} ${y(v).toFixed(1)}`), line='M '+pts.join(' L ');
+    const area=line+` L ${x(N-1).toFixed(1)} ${(H-pB).toFixed(1)} L ${x(0).toFixed(1)} ${(H-pB).toFixed(1)} Z`;
+    let labs=''; for(let i=0;i<N;i+=6){labs+=`<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" class="caxis">${i===0?'ora':h.time[hi+i].slice(11,13)}</text>`;}
+    document.getElementById('chart24').innerHTML=`<svg viewBox="0 0 ${W} ${H}" class="chart">
+      <defs><linearGradient id="g24" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1478e0" stop-opacity="0.22"/><stop offset="1" stop-color="#1478e0" stop-opacity="0"/></linearGradient></defs>
+      ${bars}<path d="${area}" fill="url(#g24)"/><path d="${line}" fill="none" stroke="#1478e0" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(0).toFixed(1)}" cy="${y(T[0]).toFixed(1)}" r="3.6" fill="#1478e0"/>
+      <text x="${pL-6}" y="${(y(tmax)+5).toFixed(1)}" text-anchor="end" class="caxis">${Math.round(tmax)}°</text>
+      <text x="${pL-6}" y="${(y(tmin)+5).toFixed(1)}" text-anchor="end" class="caxis">${Math.round(tmin)}°</text>${labs}</svg>`;
+    document.getElementById('chart24Wrap').classList.remove('hidden');
+  }
+  function renderChart7(d){
+    const dl=d.daily,N=dl.time.length; if(N<2)return; const MX=dl.temperature_2m_max,MN=dl.temperature_2m_min;
+    const W=680,H=160,pL=28,pR=14,pT=16,pB=26,lo=Math.min(...MN),hi=Math.max(...MX),r=Math.max(1,hi-lo);
+    const x=i=>pL+i*(W-pL-pR)/(N-1), y=v=>pT+(1-(v-lo)/r)*(H-pT-pB);
+    const up=MX.map((v,i)=>`${x(i).toFixed(1)} ${y(v).toFixed(1)}`), dn=MN.map((v,i)=>`${x(i).toFixed(1)} ${y(v).toFixed(1)}`);
+    const band='M '+up.join(' L ')+' L '+dn.slice().reverse().join(' L ')+' Z';
+    let dots='',labs='';
+    for(let i=0;i<N;i++){dots+=`<circle cx="${x(i).toFixed(1)}" cy="${y(MX[i]).toFixed(1)}" r="2.8" fill="#f2953b"/><circle cx="${x(i).toFixed(1)}" cy="${y(MN[i]).toFixed(1)}" r="2.8" fill="#4a9be0"/>`;
+      const dow=i===0?'Oggi':new Date(dl.time[i]).toLocaleDateString('it-IT',{weekday:'short'});labs+=`<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" class="caxis">${dow}</text>`;}
+    document.getElementById('chart7').innerHTML=`<svg viewBox="0 0 ${W} ${H}" class="chart">
+      <path d="${band}" fill="#9fb8d6" opacity="0.16"/>
+      <path d="M ${up.join(' L ')}" fill="none" stroke="#f2953b" stroke-width="2.4" stroke-linejoin="round"/>
+      <path d="M ${dn.join(' L ')}" fill="none" stroke="#4a9be0" stroke-width="2.4" stroke-linejoin="round"/>
+      ${dots}${labs}</svg>`;
+    document.getElementById('chart7Wrap').classList.remove('hidden');
+  }
+
+  renderFavBar();
+  (function(){const last=LS('mv_last'); if(last&&last.lat!=null){selectPlace(last.lat,last.lon,last.label,last.code);}})();
+
   /* ---------- Eventi ---------- */
   function runSearch(){const v=document.getElementById('q').value.trim(); if(v)geocode(v);}
   document.getElementById('searchBtn').addEventListener('click',runSearch);
@@ -520,5 +620,6 @@
       {enableHighAccuracy:false,timeout:8000,maximumAge:300000});
   });
   </script>
+  <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}</script>
 </body>
 </html>
