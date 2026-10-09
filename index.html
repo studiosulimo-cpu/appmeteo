@@ -129,9 +129,18 @@
   .pollen .prow{display:flex; justify-content:space-between; font-size:.85rem; padding:3px 0}
   .pollen .prow .lv{font-weight:600}
 
+  .pcbox{padding:16px}
+  .pc-head{display:flex; align-items:center; gap:10px; margin-bottom:12px}
+  .pc-badge{font-family:var(--display); font-weight:700; font-size:.85rem; padding:5px 11px; border-radius:999px}
+  .pc-reg{font-family:var(--display); font-weight:600}
+  .pc-cats{display:flex; flex-direction:column; gap:7px}
+  .pc-cat{display:flex; align-items:center; gap:8px; font-size:.86rem; color:var(--dim)}
+  .pc-cat b{color:var(--ink); font-weight:600; margin-left:auto}
+  .pc-dot{width:11px; height:11px; border-radius:50%; flex:0 0 auto}
+  .pc-link{display:inline-block; margin-top:12px; color:var(--accent); font-weight:600; font-size:.85rem; text-decoration:none}
   .boltbox{padding:14px 16px; margin-bottom:18px}
   #boltBtn{width:100%; background:var(--accent); color:#fff; border:0; border-radius:12px; padding:12px;
-    font-family:var(--display); font-weight:600; font-size:.95rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px}
+    font-family:var(--display); font-weight:600; font-size:.95rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px; text-decoration:none; box-sizing:border-box}
   #boltBtn:active{transform:translateY(1px)}
   .boltframe{width:100%; height:380px; border:0; border-radius:14px; background:#dfe6ee; display:block; margin-top:12px}
   .boltlink{display:inline-block; margin-top:10px; color:var(--accent); font-weight:600; font-size:.82rem; text-decoration:none; cursor:pointer}
@@ -233,6 +242,7 @@
         <div id="results" class="results"></div>
         <section id="hero" class="hero hidden"></section>
         <section id="sensor" class="card sensor hidden"></section>
+        <div id="pcWrap" class="hidden"><h2 class="section-title">Allerta Protezione Civile</h2><div id="pc" class="card pcbox"></div></div>
         <div id="hourlyWrap" class="hidden"><h2 class="section-title">Prossime ore</h2><div id="hourly" class="hourly"></div></div>
         <div id="chart24Wrap" class="hidden"><h2 class="section-title">Andamento 24 ore</h2><div id="chart24" class="card chartbox"></div></div>
         <div id="dailyWrap" class="hidden"><h2 class="section-title">Prossimi 7 giorni</h2><div id="daily" class="card daily"></div></div>
@@ -353,17 +363,17 @@
     status(''); res.sort((a,b)=>(a.cc==='IT'?-1:0)-(b.cc==='IT'?-1:0));
     box.innerHTML=res.map((r,i)=>{const sub=[r.admin2,r.admin1,r.country].filter(Boolean).join(', ');
       return `<div class="result" tabindex="0" role="button" data-i="${i}">${PIN}<div><b>${r.name}</b><span>${sub}</span></div></div>`;}).join('');
-    const pick=el=>{const r=res[+el.dataset.i];box.innerHTML='';document.getElementById('q').blur();selectPlace(r.lat,r.lon,`${r.name}${r.admin1?', '+r.admin1:''}`);};
+    const pick=el=>{const r=res[+el.dataset.i];box.innerHTML='';document.getElementById('q').blur();selectPlace(r.lat,r.lon,`${r.name}${r.admin1?', '+r.admin1:''}`,'',r.admin1);};
     box.querySelectorAll('.result').forEach(el=>{el.addEventListener('click',()=>pick(el));
       el.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();pick(el);}});});
   }
 
   let currentPlace=null;
-  function selectPlace(lat,lon,label,code){
-    currentPlace={lat,lon,label,code:code||''}; saveLast(currentPlace);
+  function selectPlace(lat,lon,label,code,region){
+    currentPlace={lat,lon,label,code:code||'',region:region||''}; saveLast(currentPlace);
     map.setView([lat,lon],10); map.invalidateSize();
     if(window._mk)map.removeLayer(window._mk); window._mk=L.marker([lat,lon]).addTo(map);
-    loadForecast(lat,lon,label); loadAir(lat,lon); renderBolt(lat,lon);
+    loadForecast(lat,lon,label); loadAir(lat,lon); renderBolt(lat,lon); renderPC(lat,lon,region);
     if(code && CONFIG.WORKER_URL){ loadSensor(code,label); } else { document.getElementById('sensor').classList.add('hidden'); }
   }
 
@@ -503,7 +513,7 @@
     bar.innerHTML='<span style="align-self:center;color:var(--dim);font-size:.8rem;margin-right:2px">Le nostre stazioni</span>'+
       list.map((s,i)=>`<button class="chip" data-i="${i}">${PIN}${s.name}</button>`).join('');
     bar.querySelectorAll('.chip').forEach(el=>el.addEventListener('click',()=>{const s=list[+el.dataset.i];
-      selectPlace(s.lat,s.lon,s.name,s.code); window.scrollTo({top:0,behavior:'smooth'});}));
+      selectPlace(s.lat,s.lon,s.name,s.code,s.region); window.scrollTo({top:0,behavior:'smooth'});}));
     bar.classList.remove('hidden');
   }
   async function loadSensor(code,label){
@@ -562,12 +572,12 @@
   function updateStar(){const s=document.getElementById('favStar'); if(s)s.classList.toggle('on',isFav(currentPlace));}
   function toggleFav(){if(!currentPlace)return; let a=favs();
     if(isFav(currentPlace)) a=a.filter(f=>f.label!==currentPlace.label);
-    else a.push({lat:currentPlace.lat,lon:currentPlace.lon,label:currentPlace.label,code:currentPlace.code});
+    else a.push({lat:currentPlace.lat,lon:currentPlace.lon,label:currentPlace.label,code:currentPlace.code,region:currentPlace.region});
     LSset('mv_favs',a); updateStar(); renderFavBar();}
   function renderFavBar(){const a=favs(),bar=document.getElementById('favBar'); if(!a.length){bar.classList.add('hidden');return;}
     bar.innerHTML='<span style="align-self:center;color:var(--dim);font-size:.8rem;margin-right:2px">Preferiti</span>'+
       a.map((f,i)=>`<button class="chip" data-i="${i}">${PIN}${esc(f.label)}</button>`).join('');
-    bar.querySelectorAll('.chip').forEach(el=>el.addEventListener('click',()=>{const f=a[+el.dataset.i];selectPlace(f.lat,f.lon,f.label,f.code);window.scrollTo({top:0,behavior:'smooth'});}));
+    bar.querySelectorAll('.chip').forEach(el=>el.addEventListener('click',()=>{const f=a[+el.dataset.i];selectPlace(f.lat,f.lon,f.label,f.code,f.region);window.scrollTo({top:0,behavior:'smooth'});}));
     bar.classList.remove('hidden');}
 
   function renderAlert(d){
@@ -616,21 +626,50 @@
   function renderBolt(lat,lon){
     const url=`https://www.lightningmaps.org/#m=oss;t=3;s=0;o=0;b=;ts=0;y=${lat.toFixed(3)};x=${lon.toFixed(3)};z=8;d=2;dl=2;dc=0;`;
     const wrap=document.getElementById('boltWrap'), box=document.getElementById('bolt');
-    box.innerHTML=`<button id="boltBtn">${BOLT} Apri la mappa fulmini in tempo reale</button>
-      <div id="boltHolder"></div>
-      <a class="boltlink" id="boltToggle">Mostra la mappa qui nell'app</a>
-      <p class="attr">Dati fulmini: Blitzortung.org e collaboratori · Mappa: LightningMaps.org (CC BY-SA). Uso non commerciale, a scopo informativo.</p>`;
-    document.getElementById('boltBtn').onclick=()=>window.open(url,'_blank','noopener');
-    const tog=document.getElementById('boltToggle'); let shown=false;
-    tog.onclick=()=>{const h=document.getElementById('boltHolder');
-      if(shown){h.innerHTML='';tog.textContent='Mostra la mappa qui nell’app';shown=false;return;}
-      h.innerHTML=`<iframe class="boltframe" src="${url}" loading="lazy" referrerpolicy="no-referrer"></iframe>`;
-      tog.textContent='Nascondi la mappa';shown=true;};
+    box.innerHTML=`<a id="boltBtn" href="${url}" target="_blank" rel="noopener">${BOLT} Apri la mappa fulmini in tempo reale</a>
+      <p class="attr">Si apre su LightningMaps: il loro sito non consente di mostrare la mappa dentro altre app. Dati fulmini: Blitzortung.org e collaboratori · Mappa: LightningMaps.org (CC BY-SA). Uso non commerciale, a scopo informativo.</p>`;
     wrap.classList.remove('hidden');
   }
 
+  /* ---------- Allerta Protezione Civile (Bollettino di criticità, tutte le regioni) ---------- */
+  const PC_PREFIX={Abru:'Abruzzo',Basi:'Basilicata',Cala:'Calabria',Camp:'Campania',Emil:'Emilia-Romagna',Friu:'Friuli-Venezia Giulia',Lazi:'Lazio',Ligu:'Liguria',Lomb:'Lombardia',Marc:'Marche',Moli:'Molise',Piem:'Piemonte',Pugl:'Puglia',Sard:'Sardegna',Sici:'Sicilia',Tosc:'Toscana',Tren:'Trentino-Alto Adige/Südtirol',Umbr:'Umbria',VDAo:"Valle d'Aosta/Vallée d'Aoste",Vene:'Veneto'};
+  const PC_COLORS=['#57c98a','#f4c430','#f2953b','#e4572e'], PC_LABELS=['Nessuna allerta','Allerta gialla','Allerta arancione','Allerta rossa'];
+  const pcLvl=t=>{t=(t||'').toUpperCase(); return t.includes('ROSSA')?3:t.includes('ARANCIONE')?2:t.includes('GIALLA')?1:0;};
+  const normReg=s=>(s||'').toLowerCase().split('/')[0].normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z]/g,'');
+  const PC_ALIAS={}; (function(){Object.values(PC_PREFIX).forEach(n=>PC_ALIAS[normReg(n)]=n);
+    Object.entries({piedmont:'Piemonte',aostavalley:"Valle d'Aosta/Vallée d'Aoste",valledaosta:"Valle d'Aosta/Vallée d'Aoste",lombardy:'Lombardia',trentinosouthtyrol:'Trentino-Alto Adige/Südtirol',trentinoaltoadige:'Trentino-Alto Adige/Südtirol',sudtirol:'Trentino-Alto Adige/Südtirol',friuliveneziagiulia:'Friuli-Venezia Giulia',tuscany:'Toscana',themarches:'Marche',latium:'Lazio',apulia:'Puglia',sicily:'Sicilia',sardinia:'Sardegna',abruzzi:'Abruzzo'}).forEach(([k,v])=>PC_ALIAS[k]=v);})();
+  let PC_CACHE=null;
+  async function pcData(){
+    if(PC_CACHE)return PC_CACHE;
+    const url='https://raw.githubusercontent.com/opendatasicilia/DPC-bollettini-criticita-idrogeologica-idraulica/main/data/bollettini/bollettino-oggi-zone-latest.csv';
+    const rows=parseCSV(await (await fetch(url)).text()); const h=rows[0], at=n=>h.indexOf(n);
+    const zi=at('zona_codice'),ci=at('avviso_criticita'),gi=at('avviso_idrogeologico'),ti=at('avviso_temporali'),ii=at('avviso_idraulico'),di=at('data_validita_inizio');
+    const data={}; let date='';
+    for(let k=1;k<rows.length;k++){const r=rows[k]; if(!r[zi])continue;
+      const pref=(r[zi].match(/^[A-Za-z]+/)||[''])[0], reg=PC_PREFIX[pref]; if(!reg)continue;
+      date=date||r[di]||'';
+      const o=data[reg]||(data[reg]={idro:0,idra:0,temp:0,crit:0});
+      o.idro=Math.max(o.idro,pcLvl(r[gi]));o.idra=Math.max(o.idra,pcLvl(r[ii]));o.temp=Math.max(o.temp,pcLvl(r[ti]));o.crit=Math.max(o.crit,pcLvl(r[ci]));}
+    PC_CACHE={data,date}; return PC_CACHE;
+  }
+  async function renderPC(lat,lon,region){
+    const wrap=document.getElementById('pcWrap'), box=document.getElementById('pc');
+    try{
+      if(!region){ try{const g=await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=it&zoom=8`)).json(); region=g.address&&g.address.state;}catch(e){} }
+      const key=region&&PC_ALIAS[normReg(region)]; if(!key){wrap.classList.add('hidden');return;}
+      const {data,date}=await pcData(); const a=data[key]; if(!a){wrap.classList.add('hidden');return;}
+      const ov=Math.max(a.idro,a.idra,a.temp,a.crit);
+      const cat=(l,v)=>`<div class="pc-cat"><span class="pc-dot" style="background:${PC_COLORS[v]}"></span>${l}<b>${PC_LABELS[v]}</b></div>`;
+      box.innerHTML=`<div class="pc-head"><span class="pc-badge" style="background:${PC_COLORS[ov]};color:${ov===1?'#3a2e00':'#fff'}">${PC_LABELS[ov]}</span><span class="pc-reg">${key.split('/')[0]}</span></div>
+        <div class="pc-cats">${cat('Idrogeologica',a.idro)}${cat('Idraulica',a.idra)}${cat('Temporali',a.temp)}</div>
+        <a class="pc-link" href="https://mappe.protezionecivile.gov.it/it/mappe-rischi/bollettino-di-criticita" target="_blank" rel="noopener">Bollettino ufficiale della Protezione Civile</a>
+        <p class="attr">Fonte: Dipartimento della Protezione Civile — Bollettino di criticità (via opendatasicilia, CC BY 4.0), aggiornato una volta al giorno verso le 16.${date?' Valido dal '+date.slice(0,10):''}</p>`;
+      wrap.classList.remove('hidden');
+    }catch(e){ console.warn('PC',e&&e.message); wrap.classList.add('hidden'); }
+  }
+
   renderFavBar();
-  (function(){const last=LS('mv_last'); if(last&&last.lat!=null){selectPlace(last.lat,last.lon,last.label,last.code);}})();
+  (function(){const last=LS('mv_last'); if(last&&last.lat!=null){selectPlace(last.lat,last.lon,last.label,last.code,last.region);}})();
 
   /* ---------- Eventi ---------- */
   function runSearch(){const v=document.getElementById('q').value.trim(); if(v)geocode(v);}
