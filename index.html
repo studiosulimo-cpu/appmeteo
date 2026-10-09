@@ -242,11 +242,11 @@
         <div id="results" class="results"></div>
         <section id="hero" class="hero hidden"></section>
         <section id="sensor" class="card sensor hidden"></section>
-        <div id="pcWrap" class="hidden"><h2 class="section-title">Allerta Protezione Civile</h2><div id="pc" class="card pcbox"></div></div>
         <div id="hourlyWrap" class="hidden"><h2 class="section-title">Prossime ore</h2><div id="hourly" class="hourly"></div></div>
         <div id="chart24Wrap" class="hidden"><h2 class="section-title">Andamento 24 ore</h2><div id="chart24" class="card chartbox"></div></div>
         <div id="dailyWrap" class="hidden"><h2 class="section-title">Prossimi 7 giorni</h2><div id="daily" class="card daily"></div></div>
         <div id="chart7Wrap" class="hidden"><h2 class="section-title">Andamento 7 giorni</h2><div id="chart7" class="card chartbox"></div></div>
+        <div id="pcWrap" class="hidden"><h2 class="section-title">Allerta Protezione Civile</h2><div id="pc" class="card pcbox"></div></div>
         <div id="sunWrap" class="hidden"><h2 class="section-title">Sole e luna</h2><div id="sun" class="card sun"></div></div>
         <div id="detailsWrap" class="hidden"><h2 class="section-title">Dettagli</h2><div id="details" class="card details"></div></div>
         <div id="airWrap" class="hidden"><h2 class="section-title">Aria e pollini</h2><div id="air" class="card air"></div></div>
@@ -664,6 +664,10 @@
         <div class="pc-cats">${cat('Idrogeologica',a.idro)}${cat('Idraulica',a.idra)}${cat('Temporali',a.temp)}</div>
         <a class="pc-link" href="https://mappe.protezionecivile.gov.it/it/mappe-rischi/bollettino-di-criticita" target="_blank" rel="noopener">Bollettino ufficiale della Protezione Civile</a>
         <p class="attr">Fonte: Dipartimento della Protezione Civile — Bollettino di criticità (via opendatasicilia, CC BY 4.0), aggiornato una volta al giorno verso le 16.${date?' Valido dal '+date.slice(0,10):''}</p>`;
+      box.style.border = ov>=1 ? '1.5px solid '+PC_COLORS[ov] : '';
+      const col=wrap.parentNode;
+      if(ov>=1){ const t=document.getElementById('hourlyWrap'); if(t) col.insertBefore(wrap,t); }   // allerta: in alto
+      else { const c7=document.getElementById('chart7Wrap'); if(c7) col.insertBefore(wrap,c7.nextSibling); }   // verde: dopo i 7 giorni
       wrap.classList.remove('hidden');
     }catch(e){ console.warn('PC',e&&e.message); wrap.classList.add('hidden'); }
   }
