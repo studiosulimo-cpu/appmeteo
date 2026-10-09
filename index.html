@@ -129,6 +129,13 @@
   .pollen .prow{display:flex; justify-content:space-between; font-size:.85rem; padding:3px 0}
   .pollen .prow .lv{font-weight:600}
 
+  .boltbox{padding:14px 16px; margin-bottom:18px}
+  #boltBtn{width:100%; background:var(--accent); color:#fff; border:0; border-radius:12px; padding:12px;
+    font-family:var(--display); font-weight:600; font-size:.95rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px}
+  #boltBtn:active{transform:translateY(1px)}
+  .boltframe{width:100%; height:380px; border:0; border-radius:14px; background:#dfe6ee; display:block; margin-top:12px}
+  .boltlink{display:inline-block; margin-top:10px; color:var(--accent); font-weight:600; font-size:.82rem; text-decoration:none; cursor:pointer}
+  .boltbox .attr{font-size:.68rem; color:var(--dim); margin:10px 2px 0; line-height:1.5}
   .alert{border-radius:14px; padding:11px 14px; margin-bottom:12px; font-size:.88rem; font-weight:600}
   .alert.warn{background:#fff4e2; color:#9a5a12; border:1px solid #f3d6a6}
   .alert.sev{background:#fde7df; color:#9b3416; border:1px solid #f3b9a3}
@@ -233,6 +240,7 @@
         <div id="sunWrap" class="hidden"><h2 class="section-title">Sole e luna</h2><div id="sun" class="card sun"></div></div>
         <div id="detailsWrap" class="hidden"><h2 class="section-title">Dettagli</h2><div id="details" class="card details"></div></div>
         <div id="airWrap" class="hidden"><h2 class="section-title">Aria e pollini</h2><div id="air" class="card air"></div></div>
+        <div id="boltWrap" class="hidden"><h2 class="section-title">Fulmini in tempo reale</h2><div id="bolt" class="card boltbox"></div></div>
         <div id="newsWrap" class="hidden"><h2 class="section-title">Notizie dell'associazione</h2><div id="news" class="news"></div></div>
       </div>
       <div class="col-map">
@@ -355,7 +363,7 @@
     currentPlace={lat,lon,label,code:code||''}; saveLast(currentPlace);
     map.setView([lat,lon],10); map.invalidateSize();
     if(window._mk)map.removeLayer(window._mk); window._mk=L.marker([lat,lon]).addTo(map);
-    loadForecast(lat,lon,label); loadAir(lat,lon);
+    loadForecast(lat,lon,label); loadAir(lat,lon); renderBolt(lat,lon);
     if(code && CONFIG.WORKER_URL){ loadSensor(code,label); } else { document.getElementById('sensor').classList.add('hidden'); }
   }
 
@@ -531,7 +539,7 @@
   }
   async function renderNews(){
     let list=[];
-    if(CONFIG.NEWS_SHEET_CSV){ try{list=await newsFromSheet(CONFIG.NEWS_SHEET_CSV);}catch(e){console.error('sheet',e);} }
+    if(CONFIG.NEWS_SHEET_CSV){ try{list=await newsFromSheet(CONFIG.NEWS_SHEET_CSV);}catch(e){console.warn('Notizie dal Foglio Google non caricate, uso i contenuti locali:', e&&e.message);} }
     if(!list.length) list=await loadJSON('news.json',NEWS);
     const box=document.getElementById('news'); if(!list.length)return;
     box.innerHTML=list.map(p=>`<article class="post">
@@ -602,6 +610,23 @@
       <path d="M ${dn.join(' L ')}" fill="none" stroke="#4a9be0" stroke-width="2.4" stroke-linejoin="round"/>
       ${dots}${labs}</svg>`;
     document.getElementById('chart7Wrap').classList.remove('hidden');
+  }
+
+  const BOLT='<svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px"><path d="M13 2L4.5 13.5H11l-1 8.5L19.5 10H13z"/></svg>';
+  function renderBolt(lat,lon){
+    const url=`https://www.lightningmaps.org/#m=oss;t=3;s=0;o=0;b=;ts=0;y=${lat.toFixed(3)};x=${lon.toFixed(3)};z=8;d=2;dl=2;dc=0;`;
+    const wrap=document.getElementById('boltWrap'), box=document.getElementById('bolt');
+    box.innerHTML=`<button id="boltBtn">${BOLT} Apri la mappa fulmini in tempo reale</button>
+      <div id="boltHolder"></div>
+      <a class="boltlink" id="boltToggle">Mostra la mappa qui nell'app</a>
+      <p class="attr">Dati fulmini: Blitzortung.org e collaboratori · Mappa: LightningMaps.org (CC BY-SA). Uso non commerciale, a scopo informativo.</p>`;
+    document.getElementById('boltBtn').onclick=()=>window.open(url,'_blank','noopener');
+    const tog=document.getElementById('boltToggle'); let shown=false;
+    tog.onclick=()=>{const h=document.getElementById('boltHolder');
+      if(shown){h.innerHTML='';tog.textContent='Mostra la mappa qui nell’app';shown=false;return;}
+      h.innerHTML=`<iframe class="boltframe" src="${url}" loading="lazy" referrerpolicy="no-referrer"></iframe>`;
+      tog.textContent='Nascondi la mappa';shown=true;};
+    wrap.classList.remove('hidden');
   }
 
   renderFavBar();
